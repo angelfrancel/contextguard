@@ -23,12 +23,12 @@ class PolicyEvaluatorTest {
                 Map.of()
         );
 
-        PolicyOutcome result = evaluator.evaluate(
+        PolicyDecision result = evaluator.evaluate(
                 List.of(),
                 snapshot
         );
 
-        assertEquals(PolicyOutcome.ALLOW, result);
+        assertEquals(PolicyOutcome.ALLOW, result.outcome());
     }
 
     @Test
@@ -41,12 +41,12 @@ class PolicyEvaluatorTest {
                 )
         );
 
-        PolicyOutcome result = evaluator.evaluate(
+        PolicyDecision result = evaluator.evaluate(
                 List.of(detection(DetectionType.EMAIL)),
                 snapshot
         );
 
-        assertEquals(PolicyOutcome.REDACT, result);
+        assertEquals(PolicyOutcome.REDACT, result.outcome());
     }
 
     @Test
@@ -59,12 +59,12 @@ class PolicyEvaluatorTest {
                 )
         );
 
-        PolicyOutcome result = evaluator.evaluate(
+        PolicyDecision result = evaluator.evaluate(
                 List.of(detection(DetectionType.PAYMENT_CARD)),
                 snapshot
         );
 
-        assertEquals(PolicyOutcome.BLOCK, result);
+        assertEquals(PolicyOutcome.BLOCK, result.outcome());
     }
 
     @Test
@@ -79,7 +79,7 @@ class PolicyEvaluatorTest {
                 )
         );
 
-        PolicyOutcome result = evaluator.evaluate(
+        PolicyDecision result = evaluator.evaluate(
                 List.of(
                         detection(DetectionType.EMAIL),
                         detection(DetectionType.PAYMENT_CARD)
@@ -87,7 +87,30 @@ class PolicyEvaluatorTest {
                 snapshot
         );
 
-        assertEquals(PolicyOutcome.BLOCK, result);
+        assertEquals(PolicyOutcome.BLOCK, result.outcome());
+        assertEquals(List.of(), result.detectionsToRedact());
+    }
+
+    @Test
+    void redactsOnlyDetectionsWithRedactPolicy() {
+        Detection email = detection(DetectionType.EMAIL);
+        Detection token = detection(DetectionType.AUTHENTICATION_TOKEN);
+
+        PolicySnapshot snapshot = new PolicySnapshot(
+                1L,
+                Map.of(
+                        DetectionType.EMAIL, PolicyOutcome.ALLOW,
+                        DetectionType.AUTHENTICATION_TOKEN, PolicyOutcome.REDACT
+                )
+        );
+
+        PolicyDecision result = evaluator.evaluate(
+                List.of(email, token),
+                snapshot
+        );
+
+        assertEquals(PolicyOutcome.REDACT, result.outcome());
+        assertEquals(List.of(token), result.detectionsToRedact());
     }
 
     @Test
