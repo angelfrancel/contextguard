@@ -3,7 +3,6 @@ package com.contextguard.policy;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import java.security.Policy;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
