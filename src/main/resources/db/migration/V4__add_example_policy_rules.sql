@@ -1,0 +1,6 @@
+INSERT INTO policy_rules (detection_type, outcome, enabled)
+VALUES
+    ('PHILIPPINE_MOBILE_NUMBER', 'REDACT', TRUE),
+    ('PAYMENT_CARD', 'REDACT', TRUE),
+    ('AUTHENTICATION_TOKEN', 'BLOCK', TRUE),
+    ('SENSITIVE_JSON_FIELD', 'BLOCK', TRUE);
