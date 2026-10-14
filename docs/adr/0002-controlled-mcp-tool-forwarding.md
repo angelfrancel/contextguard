@@ -36,7 +36,7 @@ MCP caller
   → result returned through ContextGuard
 ```
 
-The static `echo` handler is experimental scaffolding. The completed gateway will implement the supported MCP operations and insert the privacy-policy pipeline before forwarding `tools/call` arguments. It will not require one hard-coded Java method for every future upstream tool.
+The initial static `echo` handler established the transport path. ContextGuard now lists every tool from its single configured Streamable HTTP upstream at startup, preserving each tool's schema while registering a ContextGuard-owned call handler. Every registered `tools/call` passes through detection, policy evaluation, redaction, and auditing before the upstream adapter can invoke the tool. Tool-list changes require a gateway restart. This keeps tool exposure explicit without one Java method per upstream tool.
 
 ## Alternatives considered
 
@@ -114,7 +114,10 @@ The decision was validated with Java 21, Spring Boot 4.1.1, Spring AI 2.0.1, and
 
 ## Follow-up work
 
-- Replace the static vertical-slice forwarding path with the supported generic MCP gateway operations.
-- Insert the plain-Java privacy-policy engine before upstream `tools/call` execution.
+- Decide whether to refresh tool discovery when the upstream sends a tool-list-changed notification.
 - Define controlled MCP error mapping for unavailable, timed-out, and invalid upstream responses.
-- Add integration tests that start a real demo upstream rather than relying on a manually running process.
+- Add automated integration tests that start a real demo upstream rather than relying on a manually running process.
+
+## 2026-10-14 verification
+
+The demo upstream advertised `echo` and `uppercase`. ContextGuard registered both while automatic client-tool exposure remained disabled. A real MCP client listed both through ContextGuard and called both tools. The calls showed plain forwarding, email and card redaction, and token blocking. PostgreSQL contained metadata-only `ALLOW`, `REDACT`, and `BLOCK` audit rows for those calls.
