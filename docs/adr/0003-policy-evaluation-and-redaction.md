@@ -17,7 +17,7 @@ The evaluator resolves `BLOCK` before `REDACT` before `ALLOW`. A detection witho
 
 For a `REDACT` decision, whole-field detections replace the entire field value with `[REDACTED]`. Text detections replace only their ranges. Overlapping ranges are merged before replacement, and replacements run from right to left so earlier indexes remain valid. `ArgumentRedactor` recursively creates new maps and lists, leaving the original arguments unchanged. A detection path that cannot be applied is rejected rather than silently forwarded.
 
-Gateway integration must check for `BLOCK` before redaction or any upstream `tools/call`. For `ALLOW`, it may forward the original arguments. For `REDACT`, it must forward the sanitized copy. This gateway behavior remains to be wired into the MCP call path.
+The gateway checks for `BLOCK` before any upstream `tools/call`. For `ALLOW`, it forwards a validated copy of the arguments. For `REDACT`, it forwards the sanitized copy. Every tool discovered from the configured upstream uses this guarded path. It writes an audit record containing only the tool name, outcome, detection count, snapshot version, and timestamp before forwarding. If the audit write fails, the call does not reach the upstream server.
 
 ## Alternatives considered
 
@@ -38,7 +38,7 @@ Changing a string's length would invalidate later offsets. Merging overlaps and 
 - Policy evaluation and redaction can be unit tested without Spring or an upstream server.
 - Missing rules and invalid redaction paths stop processing instead of silently allowing sensitive data through.
 - Snapshot refresh must compile a complete valid replacement before publishing it.
-- The MCP gateway still needs to enforce the decision at the forwarding boundary; the plain-Java policy engine alone does not prevent an upstream call.
+- Every exposed gateway tool must use the guarded call service; future tools must not call the upstream adapter directly.
 
 ## Validation evidence
 
