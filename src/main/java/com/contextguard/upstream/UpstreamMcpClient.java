@@ -1,15 +1,18 @@
 package com.contextguard.upstream;
 
 import io.modelcontextprotocol.client.McpSyncClient;
-import io.modelcontextprotocol.spec.McpSchema.ListToolsResult;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.ListToolsResult;
+import io.modelcontextprotocol.spec.McpSchema.Tool;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Set;
 
 @Component
 public class UpstreamMcpClient {
@@ -22,6 +25,24 @@ public class UpstreamMcpClient {
 
     public ListToolsResult listTools() {
         return singleClient().listTools();
+    }
+
+    public List<Tool> listAllTools() {
+        McpSyncClient client = singleClient();
+        List<Tool> tools = new ArrayList<>();
+        Set<String> seenCursors = new HashSet<>();
+        String cursor = null;
+
+        do {
+            ListToolsResult page = cursor == null ? client.listTools() : client.listTools(cursor);
+            tools.addAll(page.tools());
+            cursor = page.nextCursor();
+            if (cursor != null && !cursor.isBlank() && !seenCursors.add(cursor)) {
+                throw new IllegalStateException("upstream tool pagination repeated a cursor");
+            }
+        } while (cursor != null && !cursor.isBlank());
+
+        return List.copyOf(tools);
     }
 
     public CallToolResult callTool(
