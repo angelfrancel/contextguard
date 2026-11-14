@@ -11,7 +11,7 @@ MCP tool arguments can contain sensitive values in strings, nested objects, and 
 
 ## Decision
 
-Enabled rules are compiled into an immutable `PolicySnapshot` keyed by detection type. Duplicate enabled rules for one type are rejected. A `PolicySnapshotStore` replaces the current snapshot atomically. An evaluation uses a supplied snapshot, so a call can use one consistent policy version.
+Enabled rules are compiled into an immutable `PolicySnapshot` keyed by detection type. Duplicate enabled default rules for one type are rejected. A `PolicySnapshotStore` replaces the current snapshot atomically. An evaluation uses a supplied snapshot, so a call can use one consistent policy version. ADR-0004 extends this design with tool-specific overrides.
 
 The evaluator resolves `BLOCK` before `REDACT` before `ALLOW`. A detection without a configured rule fails closed as `BLOCK`. Its `PolicyDecision` contains the overall outcome and only the detections whose rules require redaction. A `BLOCK` decision carries no redaction detections.
 
