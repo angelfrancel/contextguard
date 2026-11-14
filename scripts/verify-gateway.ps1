@@ -40,10 +40,10 @@ $null = Send-McpMessage -Method 'notifications/initialized' -Id 0
 
 $listed = Send-McpMessage -Method 'tools/list' -Id 2 -Parameters @{}
 $names = @($listed.result.tools | ForEach-Object { $_.name })
-if ('echo' -notin $names -or 'uppercase' -notin $names) {
-    throw "Expected echo and uppercase, found: $($names -join ', ')"
+if ('echo' -notin $names -or 'uppercase' -notin $names -or 'internal_note' -notin $names) {
+    throw "Expected echo, uppercase, and internal_note, found: $($names -join ', ')"
 }
-Write-Output 'PASS: gateway lists echo and uppercase'
+Write-Output 'PASS: gateway lists echo, uppercase, and internal_note'
 
 function Assert-ToolCall {
     param(
@@ -71,9 +71,13 @@ Assert-ToolCall -Id 3 -Name 'echo' -Text 'hello' -ExpectedText 'hello'
 Write-Output 'PASS: plain echo reaches upstream'
 Assert-ToolCall -Id 4 -Name 'echo' -Text 'contact a@b.com' -ExpectedText 'contact [REDACTED]'
 Write-Output 'PASS: email is redacted before echo'
-Assert-ToolCall -Id 5 -Name 'uppercase' -Text 'contact a@b.com' -ExpectedText 'CONTACT [REDACTED]'
+Assert-ToolCall -Id 5 -Name 'internal_note' -Text 'contact a@b.com' -ExpectedText 'contact a@b.com'
+Write-Output 'PASS: approved internal tool receives the email'
+Assert-ToolCall -Id 6 -Name 'uppercase' -Text 'contact a@b.com' -ExpectedText 'CONTACT [REDACTED]'
 Write-Output 'PASS: second tool uses the same guard'
-Assert-ToolCall -Id 6 -Name 'echo' -Text 'card 4111 1111 1111 1111' -ExpectedText 'card [REDACTED]'
+Assert-ToolCall -Id 7 -Name 'echo' -Text 'card 4111 1111 1111 1111' -ExpectedText 'card [REDACTED]'
 Write-Output 'PASS: payment card is redacted'
-Assert-ToolCall -Id 7 -Name 'uppercase' -Text 'Bearer demo_token' -ExpectedError $true
+Assert-ToolCall -Id 8 -Name 'uppercase' -Text 'Bearer demo_token' -ExpectedError $true
 Write-Output 'PASS: token is blocked'
+Assert-ToolCall -Id 9 -Name 'internal_note' -Text 'Bearer demo_token' -ExpectedError $true
+Write-Output 'PASS: approved internal tool still blocks a token'
