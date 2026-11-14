@@ -142,4 +142,27 @@ class PolicySnapshotCompilerTest {
                 () -> compiler.compile(1L, rules)
         );
     }
+
+    @Test
+    void toolRuleOverridesDefaultWithoutChangingOtherTools() {
+        PolicySnapshot snapshot = compiler.compile(1L, List.of(
+                new PolicyRule(1L, DetectionType.EMAIL, PolicyOutcome.REDACT, true),
+                new PolicyRule(2L, "internal_note", DetectionType.EMAIL, PolicyOutcome.ALLOW, true)
+        ));
+
+        assertEquals(Optional.of(PolicyOutcome.ALLOW),
+                snapshot.outcomeFor("internal_note", DetectionType.EMAIL));
+        assertEquals(Optional.of(PolicyOutcome.REDACT),
+                snapshot.outcomeFor("echo", DetectionType.EMAIL));
+    }
+
+    @Test
+    void rejectsDuplicateEnabledRulesForSameToolAndType() {
+        List<PolicyRule> rules = List.of(
+                new PolicyRule(1L, "internal_note", DetectionType.EMAIL, PolicyOutcome.ALLOW, true),
+                new PolicyRule(2L, "internal_note", DetectionType.EMAIL, PolicyOutcome.BLOCK, true)
+        );
+
+        assertThrows(IllegalArgumentException.class, () -> compiler.compile(1L, rules));
+    }
 }

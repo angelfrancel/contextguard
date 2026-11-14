@@ -12,6 +12,9 @@ public class PolicyRuleEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "tool_name", length = 128)
+    private String toolName;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "detection_type", nullable = false, length = 64)
     private DetectionType detectionType;
@@ -28,6 +31,10 @@ public class PolicyRuleEntity {
 
     public Long getId() {
         return id;
+    }
+
+    public String getToolName() {
+        return toolName;
     }
 
     public DetectionType getDetectionType() {

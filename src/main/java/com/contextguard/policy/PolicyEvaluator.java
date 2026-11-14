@@ -18,9 +18,11 @@ public final class PolicyEvaluator {
     }
 
     public PolicyDecision evaluate(
+            String toolName,
             List<Detection> detections,
             PolicySnapshot snapshot
     ) {
+        ToolNamePolicy.requireValid(toolName);
         Objects.requireNonNull(detections, "detections must not be null");
         Objects.requireNonNull(snapshot, "snapshot must not be null");
 
@@ -30,7 +32,7 @@ public final class PolicyEvaluator {
         for (Detection detection : detections) {
             Objects.requireNonNull(detection, "detection must not be null");
 
-            PolicyOutcome outcome = snapshot.outcomeFor(detection.type())
+            PolicyOutcome outcome = snapshot.outcomeFor(toolName, detection.type())
                     .orElse(PolicyOutcome.BLOCK);
 
             outcomes.add(outcome);

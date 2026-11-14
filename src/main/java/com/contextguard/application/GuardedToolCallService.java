@@ -50,7 +50,7 @@ public class GuardedToolCallService {
 
             PolicySnapshot snapshot = snapshotStore.current();
             List<Detection> detections = detectionPipeline.detect(arguments);
-            PolicyDecision decision = policyEvaluator.evaluate(detections, snapshot);
+            PolicyDecision decision = policyEvaluator.evaluate(toolName, detections, snapshot);
 
             Map<String, Object> safeArguments = null;
             if (decision.outcome() != PolicyOutcome.BLOCK) {
