@@ -74,4 +74,22 @@ class PolicySnapshotTest {
                 ).orElseThrow()
         );
     }
+
+    @Test
+    void copiesAndExposesImmutableToolOverrides() {
+        Map<ToolPolicyKey, PolicyOutcome> overrides = new java.util.HashMap<>();
+        ToolPolicyKey key = new ToolPolicyKey("internal_note", DetectionType.EMAIL);
+        overrides.put(key, PolicyOutcome.ALLOW);
+        PolicySnapshot snapshot = new PolicySnapshot(
+                1L, Map.of(DetectionType.EMAIL, PolicyOutcome.REDACT), overrides
+        );
+        overrides.clear();
+
+        assertEquals(PolicyOutcome.ALLOW,
+                snapshot.outcomeFor("internal_note", DetectionType.EMAIL).orElseThrow());
+        assertEquals(PolicyOutcome.REDACT,
+                snapshot.outcomeFor("echo", DetectionType.EMAIL).orElseThrow());
+        assertThrows(UnsupportedOperationException.class,
+                () -> snapshot.outcomesByToolAndType().put(key, PolicyOutcome.BLOCK));
+    }
 }

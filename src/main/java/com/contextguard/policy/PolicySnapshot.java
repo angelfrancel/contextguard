@@ -6,8 +6,13 @@ import java.util.Optional;
 
 public record PolicySnapshot(
         long version,
-        Map<DetectionType, PolicyOutcome> outcomesByType
+        Map<DetectionType, PolicyOutcome> outcomesByType,
+        Map<ToolPolicyKey, PolicyOutcome> outcomesByToolAndType
 ) {
+
+    public PolicySnapshot(long version, Map<DetectionType, PolicyOutcome> outcomesByType) {
+        this(version, outcomesByType, Map.of());
+    }
 
     public PolicySnapshot {
         if (version <= 0) {
@@ -22,6 +27,8 @@ public record PolicySnapshot(
         );
 
         outcomesByType = Map.copyOf(outcomesByType);
+        Objects.requireNonNull(outcomesByToolAndType, "outcomesByToolAndType must not be null");
+        outcomesByToolAndType = Map.copyOf(outcomesByToolAndType);
     }
 
     public Optional<PolicyOutcome> outcomeFor(
@@ -35,5 +42,11 @@ public record PolicySnapshot(
         return Optional.ofNullable(
                 outcomesByType.get(detectionType)
         );
+    }
+
+    public Optional<PolicyOutcome> outcomeFor(String toolName, DetectionType detectionType) {
+        ToolPolicyKey key = new ToolPolicyKey(toolName, detectionType);
+        PolicyOutcome specific = outcomesByToolAndType.get(key);
+        return specific != null ? Optional.of(specific) : outcomeFor(detectionType);
     }
 }

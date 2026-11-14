@@ -6,6 +6,7 @@ import com.contextguard.policy.DetectionType;
 import com.contextguard.policy.PolicyOutcome;
 import com.contextguard.policy.PolicySnapshot;
 import com.contextguard.policy.PolicySnapshotStore;
+import com.contextguard.policy.ToolPolicyKey;
 import com.contextguard.upstream.UpstreamMcpClient;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import org.junit.jupiter.api.Test;
@@ -91,6 +92,35 @@ class GuardedToolCallServiceTest {
         CallToolResult result = service.callTool("echo", Map.of("text", "hello"));
 
         assertTrue(result.isError());
+        verifyNoInteractions(upstreamClient);
+    }
+
+    @Test
+    void allowsEmailOnlyForTheApprovedTool() {
+        GuardedToolCallService service = service(new PolicySnapshot(1L,
+                Map.of(DetectionType.EMAIL, PolicyOutcome.REDACT,
+                        DetectionType.AUTHENTICATION_TOKEN, PolicyOutcome.BLOCK),
+                Map.of(new ToolPolicyKey("internal_note", DetectionType.EMAIL), PolicyOutcome.ALLOW)));
+        when(upstreamClient.callTool(eq("internal_note"), anyMap())).thenReturn(upstreamResult);
+
+        CallToolResult result = service.callTool("internal_note", Map.of("text", "contact a@b.com"));
+
+        assertEquals(upstreamResult, result);
+        verify(auditWriter).record("internal_note", PolicyOutcome.ALLOW, 1, 1L);
+        verify(upstreamClient).callTool("internal_note", Map.of("text", "contact a@b.com"));
+    }
+
+    @Test
+    void approvedToolStillBlocksTokens() {
+        GuardedToolCallService service = service(new PolicySnapshot(1L,
+                Map.of(DetectionType.EMAIL, PolicyOutcome.REDACT,
+                        DetectionType.AUTHENTICATION_TOKEN, PolicyOutcome.BLOCK),
+                Map.of(new ToolPolicyKey("internal_note", DetectionType.EMAIL), PolicyOutcome.ALLOW)));
+
+        CallToolResult result = service.callTool("internal_note", Map.of("text", "Bearer demo_token"));
+
+        assertTrue(result.isError());
+        verify(auditWriter).record("internal_note", PolicyOutcome.BLOCK, 1, 1L);
         verifyNoInteractions(upstreamClient);
     }
 

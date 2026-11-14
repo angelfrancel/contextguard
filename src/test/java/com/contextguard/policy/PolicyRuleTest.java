@@ -69,4 +69,11 @@ class PolicyRuleTest {
                 )
         );
     }
+
+    @Test
+    void rejectsInvalidToolName() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new PolicyRule(1L, "internal note", DetectionType.EMAIL,
+                        PolicyOutcome.ALLOW, true));
+    }
 }

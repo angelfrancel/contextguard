@@ -40,6 +40,10 @@ class ContextguardApplicationTests {
 				),
 				snapshotStore.current().outcomesByType()
 		);
+		assertEquals(PolicyOutcome.ALLOW,
+				snapshotStore.current().outcomeFor("internal_note", DetectionType.EMAIL).orElseThrow());
+		assertEquals(PolicyOutcome.REDACT,
+				snapshotStore.current().outcomeFor("echo", DetectionType.EMAIL).orElseThrow());
 	}
 
 	@Test

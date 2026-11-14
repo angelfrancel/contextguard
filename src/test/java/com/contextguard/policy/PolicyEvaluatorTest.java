@@ -23,7 +23,7 @@ class PolicyEvaluatorTest {
                 Map.of()
         );
 
-        PolicyDecision result = evaluator.evaluate(
+        PolicyDecision result = evaluator.evaluate("echo",
                 List.of(),
                 snapshot
         );
@@ -41,7 +41,7 @@ class PolicyEvaluatorTest {
                 )
         );
 
-        PolicyDecision result = evaluator.evaluate(
+        PolicyDecision result = evaluator.evaluate("echo",
                 List.of(detection(DetectionType.EMAIL)),
                 snapshot
         );
@@ -59,7 +59,7 @@ class PolicyEvaluatorTest {
                 )
         );
 
-        PolicyDecision result = evaluator.evaluate(
+        PolicyDecision result = evaluator.evaluate("echo",
                 List.of(detection(DetectionType.PAYMENT_CARD)),
                 snapshot
         );
@@ -79,7 +79,7 @@ class PolicyEvaluatorTest {
                 )
         );
 
-        PolicyDecision result = evaluator.evaluate(
+        PolicyDecision result = evaluator.evaluate("echo",
                 List.of(
                         detection(DetectionType.EMAIL),
                         detection(DetectionType.PAYMENT_CARD)
@@ -104,7 +104,7 @@ class PolicyEvaluatorTest {
                 )
         );
 
-        PolicyDecision result = evaluator.evaluate(
+        PolicyDecision result = evaluator.evaluate("echo",
                 List.of(email, token),
                 snapshot
         );
@@ -122,7 +122,7 @@ class PolicyEvaluatorTest {
 
         assertThrows(
                 NullPointerException.class,
-                () -> evaluator.evaluate(null, snapshot)
+                () -> evaluator.evaluate("echo", null, snapshot)
         );
     }
 
@@ -130,7 +130,7 @@ class PolicyEvaluatorTest {
     void rejectsNullSnapshot() {
         assertThrows(
                 NullPointerException.class,
-                () -> evaluator.evaluate(List.of(), null)
+                () -> evaluator.evaluate("echo", List.of(), null)
         );
     }
 
@@ -147,7 +147,7 @@ class PolicyEvaluatorTest {
 
         assertThrows(
                 NullPointerException.class,
-                () -> evaluator.evaluate(detections, snapshot)
+                () -> evaluator.evaluate("echo", detections, snapshot)
         );
     }
 
@@ -157,5 +157,21 @@ class PolicyEvaluatorTest {
                 "$.message",
                 Optional.of(new TextRange(0, 1))
         );
+    }
+
+    @Test
+    void usesToolOverrideButKeepsGlobalBlockForAnotherDetection() {
+        PolicySnapshot snapshot = new PolicySnapshot(1L,
+                Map.of(DetectionType.EMAIL, PolicyOutcome.REDACT,
+                        DetectionType.AUTHENTICATION_TOKEN, PolicyOutcome.BLOCK),
+                Map.of(new ToolPolicyKey("internal_note", DetectionType.EMAIL), PolicyOutcome.ALLOW));
+
+        assertEquals(PolicyOutcome.ALLOW, evaluator.evaluate("internal_note",
+                List.of(detection(DetectionType.EMAIL)), snapshot).outcome());
+        assertEquals(PolicyOutcome.REDACT, evaluator.evaluate("echo",
+                List.of(detection(DetectionType.EMAIL)), snapshot).outcome());
+        assertEquals(PolicyOutcome.BLOCK, evaluator.evaluate("internal_note",
+                List.of(detection(DetectionType.EMAIL), detection(DetectionType.AUTHENTICATION_TOKEN)),
+                snapshot).outcome());
     }
 }

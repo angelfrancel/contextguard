@@ -24,6 +24,7 @@ public class PolicyRuleLoader {
         for (PolicyRuleEntity entity : repository.findAll()) {
             rules.add(new PolicyRule(
                     Objects.requireNonNull(entity.getId()),
+                    entity.getToolName(),
                     entity.getDetectionType(),
                     entity.getOutcome(),
                     entity.isEnabled()
