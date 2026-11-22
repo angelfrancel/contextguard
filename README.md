@@ -1,16 +1,24 @@
 # ContextGuard
 
-**ContextGuard helps control what an AI app sends to a selected MCP tool server.**
+**Policy-driven data loss prevention for AI agents' MCP tool calls.** ContextGuard checks outgoing tool arguments before they reach a connected tool server, then allows, redacts, or blocks them according to policy.
+
+![Java 21](https://img.shields.io/badge/Java-21-blue) ![Spring Boot 4.1.1](https://img.shields.io/badge/Spring%20Boot-4.1.1-green) ![Spring AI 2.0.1](https://img.shields.io/badge/Spring%20AI-2.0.1-green) ![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-blue) [![CI](https://github.com/angelfrancel/contextguard/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/angelfrancel/contextguard/actions/workflows/ci.yml)
+
+```text
+PASS: email is redacted before echo
+PASS: approved internal tool receives the email
+PASS: token is blocked
+```
 
 ## Overview
 
 An AI app can call tools that send data to services outside an organization's intended boundary. A search query, ticket, or other tool argument could contain a customer's email address or a credential. ContextGuard sits between the MCP caller and a selected upstream tool server, where it can check those outgoing arguments before the server receives them.
 
-The gateway detects selected sensitive values, applies PostgreSQL-backed rules to allow, redact, or block the call, and records decision metadata without storing the original arguments in its audit table. It demonstrates a policy boundary that an organization could adapt to its own tools, data, and handling rules. The included rules are examples: the simulated `internal_note` tool may receive an email, while other demo tools receive a redacted value. Today, ContextGuard protects **tool-call arguments sent to one configured upstream**; support for multiple destinations is a [next step](#current-scope-and-next-steps).
+The gateway detects selected sensitive values, applies PostgreSQL-backed rules to allow, redact, or block the call, and records decision metadata without storing the original arguments in its audit table. It demonstrates a policy boundary that an organization could adapt to its own tools, data, and handling rules. The included rules are examples: the simulated `internal_note` tool may receive an email, while other demo tools receive a redacted value. Today, ContextGuard protects **tool-call arguments sent to one configured upstream**; support for multiple destinations is on the [roadmap](#roadmap).
 
 ## Demo
 
-The repository includes a separate MCP server with `echo`, `uppercase`, and a simulated approved `internal_note` tool. The [verification script](scripts/verify-gateway.ps1) connects to ContextGuard as an MCP client and calls all three tools.
+The repository includes a separate MCP server with `echo`, `uppercase`, and a simulated approved `internal_note` tool. The [PowerShell verifier](scripts/verify-gateway.ps1) exercises eight cases; the [Bash verifier](scripts/verify-gateway.sh) checks the three key interview cases on Linux/macOS.
 
 Here is the email-redaction scenario. The verification script stands in for an AI app: ContextGuard receives the **tool-call argument**, applies the email rule, and sends only the redacted value to the upstream tool.
 
@@ -22,6 +30,22 @@ flowchart LR
 ```
 
 The AI app's full prompt does not necessarily pass through ContextGuard; this gateway inspects the arguments sent in MCP `tools/call` requests.
+
+### Example interception
+
+After MCP initialization, the client sends this JSON-RPC tool call (with its session ID in the HTTP header):
+
+```json
+{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"echo","arguments":{"text":"contact a@b.com"}}}
+```
+
+The `echo` tool returns the text it receives. The relevant response fields show that ContextGuard forwarded the redacted value:
+
+```json
+{"result":{"content":[{"type":"text","text":"contact [REDACTED]"}]}}
+```
+
+For `Bearer demo_token`, ContextGuard returns a tool result with `"isError":true` and the message `Blocked by ContextGuard policy.`; it does not call the upstream tool. The blocks above show relevant JSON-RPC fields rather than a captured complete HTTP response, which may be delivered as JSON or a server-sent event.
 
 ```text
 PASS: gateway lists echo, uppercase, and internal_note
@@ -94,7 +118,7 @@ ContextGuard is one Spring Boot gateway organized into focused packages for MCP 
 | PostgreSQL 17 | Policy rules and audit metadata |
 | Spring Data JPA | Database entities and repositories |
 | Flyway | Versioned schema and example-rule migrations |
-| Docker Compose | Runs PostgreSQL, the demo upstream, and the gateway locally |
+| Docker Compose | Builds and runs PostgreSQL, the demo upstream, and the gateway locally |
 | Maven Wrapper and JUnit | Reproducible builds and automated tests |
 
 ## Testing
@@ -104,7 +128,7 @@ ContextGuard is one Spring Boot gateway organized into focused packages for MCP 
 | Detection and policy decisions | Unit tests cover detectors, tool-specific overrides, precedence, missing rules, and snapshots. |
 | Redaction | Unit tests cover nested arguments, overlapping text ranges, and preservation of original input. |
 | Database wiring | Application tests load seeded rules and verify metadata-only audit persistence. |
-| Real MCP calls | `scripts/verify-gateway.ps1` checks tool discovery, ordinary forwarding, tool-specific email handling, redaction, and blocking. |
+| Real MCP calls | `scripts/verify-gateway.ps1` checks tool discovery, ordinary forwarding, tool-specific email handling, redaction, and blocking; GitHub Actions runs it against both applications. |
 
 With PostgreSQL running and `SPRING_DATASOURCE_PASSWORD` set in the same Command Prompt terminal, run the gateway tests from the repository root:
 
@@ -119,67 +143,46 @@ cd demoupstream
 mvnw.cmd test
 ```
 
-## What I learned
+## Roadmap
 
-### MCP and integration
-
-- **MCP client and server roles:** An application can expose tools to a caller while acting as a client to another MCP server. ContextGuard uses both roles to sit between them.
-- **Tool discovery and calls:** I worked with initialization, `tools/list`, and `tools/call`, and learned why the gateway needs its own guarded handlers instead of automatically re-exposing upstream tools.
-
-### Privacy logic
-
-- **Detection, decision, and action are separate steps:** Finding sensitive data does not decide the response by itself. Policy selects `ALLOW`, `REDACT`, or `BLOCK`, with blocking taking priority.
-- **Safe redaction and checksums:** The Luhn checksum helps reduce false payment-card matches; it does not prove that a card exists. I also learned to merge overlapping text ranges and replace from right to left so earlier character positions remain valid.
-
-### Database and operations
-
-- **Flyway and JPA have different jobs:** Flyway versions schema and example-rule changes. JPA maps the resulting tables to entities and repositories for application access.
-- **Repeatable local setup:** Docker Compose starts the database and both MCP applications with a known configuration. Audit records capture decisions without keeping the sensitive argument values.
-
-### Engineering workflow
-
-- **Testing at different levels:** Unit tests check detectors and policy behavior, application tests check Spring and database wiring, and the verification script exercises real MCP calls through the gateway.
-- **Recording decisions and changes:** Architecture decision records explain choices such as explicit tool forwarding and immutable snapshots. Focused commits make each change easier to review.
-
-## Current scope and next steps
-
-ContextGuard currently uses one configured upstream, discovers tools at startup, and checks tool-call arguments. Rules can vary by tool name and detection type, with detection-type defaults for other tools; they cannot yet distinguish multiple upstream destinations or authenticated caller roles. It does not inspect upstream responses. The Compose demo publishes the gateway and database only on the host's loopback address and keeps the upstream on the private Compose network. It does not provide gateway authentication, TLS termination, or an operator interface for policy changes. Treat it as a working prototype rather than a production security boundary.
+ContextGuard checks outgoing tool-call arguments for one configured upstream, with rules by tool name and detection type. The Compose demo publishes the gateway and database only on the host's loopback address and keeps the upstream on the private Compose network. The next milestones extend this boundary to verified callers, multiple destinations, and controlled policy changes.
 
 | Next step | Why it matters |
 | --- | --- |
-| Multiple upstream destinations and destination policies | Allows an approved internal service and an external service to have distinct connections and trust boundaries. |
-| Authentication and transport security | Required before exposing the gateway beyond a trusted local environment. |
-| Broader end-to-end coverage | Exercises more policy decisions and failure paths through a real upstream in CI. |
-| Policy administration and controlled refresh | Lets operators change rules without manual database edits or a restart. |
-| Broader upstream support and catalog refresh | Allows more integrations and tool-list changes while the gateway is running. |
-| Response inspection | Extends protection to sensitive data returned by upstream tools. |
+| Authentication, role-based policy, and transport security | Verify the caller before applying permissions by role or exposing the gateway beyond a trusted local environment. |
+| Multiple upstream servers and destination-aware rules | Give internal and external services distinct connections and data-handling rules. |
+| Authorized policy administration and controlled refresh | Change rules safely without manual database edits or a restart. |
+| Response inspection | Check sensitive data returned by upstream tools as well as arguments sent to them. |
+| Automatic tool-list refresh | Pick up upstream tool changes without restarting ContextGuard. |
+| More detectors and false-positive evaluation | Cover additional data types and measure where detection is too broad. |
+| Operator UI | Make policy review and changes easier after authentication and administration controls exist. |
+| Broader end-to-end failure tests | Exercise database, upstream, and audit failures through the full MCP path. |
 
 ## Getting started
 
-The quickest local demo uses Docker Desktop and Windows PowerShell. Run these commands from the repository root. Docker Compose builds and starts PostgreSQL, the demo upstream, and ContextGuard; Java and Maven do not need to be installed on your computer for this path.
+The quickest local demo needs Docker Desktop. From the repository root:
 
-1. Copy `.env.example` to `.env` and replace the placeholder with a unique local password:
+```text
+cp .env.example .env
+docker compose up --build -d
+docker compose ps
+```
 
-   ```cmd
-   copy .env.example .env
-   ```
+`cp` works in PowerShell and Unix shells; in Windows Command Prompt use `copy .env.example .env`. **Replace the placeholder password in `.env` before starting Compose.** The file is ignored by Git. If you already initialized the PostgreSQL volume, keep its existing password; changing `.env` alone does not change the database user's password. Wait until all three services show `healthy`.
 
-   `.env` is ignored by Git. Compose passes this password to PostgreSQL and ContextGuard. If you already initialized the PostgreSQL volume, use its existing password; changing `.env` alone does not change the database user's password.
+Run the verification command for your shell:
 
-2. Build and start all three services, then wait until each reports `healthy`:
+```powershell
+# Windows PowerShell: eight checks
+.\scripts\verify-gateway.ps1 -GatewayUrl http://127.0.0.1:18080/mcp
+```
 
-   ```cmd
-   docker compose up --build -d
-   docker compose ps
-   ```
+```bash
+# Linux/macOS with bash, curl, and jq: three key checks
+bash scripts/verify-gateway.sh
+```
 
-3. In Windows PowerShell, run the verification script. Expect eight `PASS` lines:
-
-   ```powershell
-   .\scripts\verify-gateway.ps1 -GatewayUrl http://127.0.0.1:18080/mcp
-   ```
-
-   If PowerShell blocks scripts, `Set-ExecutionPolicy -Scope Process Bypass` changes the setting only for that PowerShell session. To see startup or error logs, use `docker compose logs contextguard demoupstream postgres`. Stop the demo with `docker compose down`; this keeps the PostgreSQL data volume.
+Both verify redaction, a tool-specific exception, and blocking. For logs, use `docker compose logs contextguard demoupstream postgres`. Stop the demo with `docker compose down`; this keeps the PostgreSQL data volume. If PowerShell blocks scripts, `Set-ExecutionPolicy -Scope Process Bypass` changes the setting only for that session.
 
 ### Run the Java applications locally
 
