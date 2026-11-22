@@ -115,3 +115,6 @@ jobs:
           (echo > /dev/tcp/127.0.0.1/18080) 2>/dev/null || { echo 'ContextGuard did not start'; exit 1; }
 
           pwsh -File ./scripts/verify-gateway.ps1 -GatewayUrl http://127.0.0.1:18080/mcp
+          sudo apt-get update
+          sudo apt-get install -y jq
+          bash ./scripts/verify-gateway.sh http://127.0.0.1:18080/mcp

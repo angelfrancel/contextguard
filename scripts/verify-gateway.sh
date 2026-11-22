@@ -33,14 +33,34 @@ json_result() {
 
 send '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
 
-echo_result="$(json_result "$(send '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"text":"contact a@b.com"}}}')")"
-[[ "$(printf '%s' "$echo_result" | jq -r '.result.content[0].text')" == 'contact [REDACTED]' ]] || { echo 'FAIL: email redaction' >&2; exit 1; }
+listed="$(json_result "$(send '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}')")"
+printf '%s' "$listed" | jq -e '([.result.tools[].name] | index("echo") != null and index("uppercase") != null and index("internal_note") != null)' >/dev/null || { echo 'FAIL: expected echo, uppercase, and internal_note' >&2; exit 1; }
+echo 'PASS: gateway lists echo, uppercase, and internal_note'
+
+assert_tool_call() {
+  local id="$1" name="$2" input="$3" expected_text="$4" expected_error="$5"
+  local request response actual_error actual_text
+  request="$(jq -nc --argjson id "$id" --arg name "$name" --arg text "$input" '{jsonrpc:"2.0",id:$id,method:"tools/call",params:{name:$name,arguments:{text:$text}}}')"
+  response="$(json_result "$(send "$request")")"
+  actual_error="$(printf '%s' "$response" | jq -r '.result.isError // false')"
+  [[ "$actual_error" == "$expected_error" ]] || { echo "FAIL: unexpected error status for $name" >&2; exit 1; }
+  if [[ "$expected_error" == false ]]; then
+    actual_text="$(printf '%s' "$response" | jq -r '.result.content[0].text')"
+    [[ "$actual_text" == "$expected_text" ]] || { echo "FAIL: unexpected response text for $name" >&2; exit 1; }
+  fi
+}
+
+assert_tool_call 3 echo 'hello' 'hello' false
+echo 'PASS: plain echo reaches upstream'
+assert_tool_call 4 echo 'contact a@b.com' 'contact [REDACTED]' false
 echo 'PASS: email is redacted before echo'
-
-internal_result="$(json_result "$(send '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"internal_note","arguments":{"text":"contact a@b.com"}}}')")"
-[[ "$(printf '%s' "$internal_result" | jq -r '.result.content[0].text')" == 'contact a@b.com' ]] || { echo 'FAIL: tool-specific email rule' >&2; exit 1; }
+assert_tool_call 5 internal_note 'contact a@b.com' 'contact a@b.com' false
 echo 'PASS: approved internal tool receives the email'
-
-blocked_result="$(json_result "$(send '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"internal_note","arguments":{"text":"Bearer demo_token"}}}')")"
-[[ "$(printf '%s' "$blocked_result" | jq -r '.result.isError')" == true ]] || { echo 'FAIL: token blocking' >&2; exit 1; }
+assert_tool_call 6 uppercase 'contact a@b.com' 'CONTACT [REDACTED]' false
+echo 'PASS: second tool uses the same guard'
+assert_tool_call 7 echo 'card 4111 1111 1111 1111' 'card [REDACTED]' false
+echo 'PASS: payment card is redacted'
+assert_tool_call 8 uppercase 'Bearer demo_token' '' true
+echo 'PASS: token is blocked'
+assert_tool_call 9 internal_note 'Bearer demo_token' '' true
 echo 'PASS: approved internal tool still blocks a token'
