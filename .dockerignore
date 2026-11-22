@@ -1,0 +1,12 @@
+.git/
+.github/
+.idea/
+.vscode/
+demoupstream/
+docs/
+scripts/
+target/
+.env
+.env.*
+*.log
+*.iml

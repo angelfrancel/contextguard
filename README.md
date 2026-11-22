@@ -94,7 +94,7 @@ ContextGuard is one Spring Boot gateway organized into focused packages for MCP 
 | PostgreSQL 17 | Policy rules and audit metadata |
 | Spring Data JPA | Database entities and repositories |
 | Flyway | Versioned schema and example-rule migrations |
-| Docker Compose | Local PostgreSQL setup |
+| Docker Compose | Runs PostgreSQL, the demo upstream, and the gateway locally |
 | Maven Wrapper and JUnit | Reproducible builds and automated tests |
 
 ## Testing
@@ -134,7 +134,7 @@ mvnw.cmd test
 ### Database and operations
 
 - **Flyway and JPA have different jobs:** Flyway versions schema and example-rule changes. JPA maps the resulting tables to entities and repositories for application access.
-- **Repeatable local setup:** Docker Compose starts PostgreSQL with a known configuration. Audit records capture decisions without keeping the sensitive argument values.
+- **Repeatable local setup:** Docker Compose starts the database and both MCP applications with a known configuration. Audit records capture decisions without keeping the sensitive argument values.
 
 ### Engineering workflow
 
@@ -143,46 +143,58 @@ mvnw.cmd test
 
 ## Current scope and next steps
 
-ContextGuard currently uses one configured upstream, discovers tools at startup, and checks tool-call arguments. Rules can vary by tool name and detection type, with detection-type defaults for other tools; they cannot yet distinguish multiple upstream destinations or authenticated caller roles. It does not inspect upstream responses. The local demo binds to loopback addresses and does not provide gateway authentication, TLS termination, or an operator interface for policy changes. Treat it as a working prototype rather than a production security boundary.
+ContextGuard currently uses one configured upstream, discovers tools at startup, and checks tool-call arguments. Rules can vary by tool name and detection type, with detection-type defaults for other tools; they cannot yet distinguish multiple upstream destinations or authenticated caller roles. It does not inspect upstream responses. The Compose demo publishes the gateway and database only on the host's loopback address and keeps the upstream on the private Compose network. It does not provide gateway authentication, TLS termination, or an operator interface for policy changes. Treat it as a working prototype rather than a production security boundary.
 
 | Next step | Why it matters |
 | --- | --- |
 | Multiple upstream destinations and destination policies | Allows an approved internal service and an external service to have distinct connections and trust boundaries. |
 | Authentication and transport security | Required before exposing the gateway beyond a trusted local environment. |
-| Automated tests that start a real upstream | Makes the end-to-end path repeatable in CI. |
+| Broader end-to-end coverage | Exercises more policy decisions and failure paths through a real upstream in CI. |
 | Policy administration and controlled refresh | Lets operators change rules without manual database edits or a restart. |
 | Broader upstream support and catalog refresh | Allows more integrations and tool-list changes while the gateway is running. |
 | Response inspection | Extends protection to sensitive data returned by upstream tools. |
 
 ## Getting started
 
-These steps use Windows Command Prompt for the applications and Windows PowerShell for the verification script. You need Java 21 and Docker Desktop. Run commands from the repository root unless a step says otherwise. The Maven wrappers are included; a system-wide Maven installation is not required.
+The quickest local demo uses Docker Desktop and Windows PowerShell. Run these commands from the repository root. Docker Compose builds and starts PostgreSQL, the demo upstream, and ContextGuard; Java and Maven do not need to be installed on your computer for this path.
 
-1. Create a `.env` file in the repository root with a unique local database password:
-
-   ```dotenv
-   POSTGRES_PASSWORD=replace-with-a-strong-local-password
-   ```
-
-   `.env` is ignored by Git. Use the same password for `SPRING_DATASOURCE_PASSWORD` below. Docker Compose reads `.env`; it does not automatically pass that password to the Java application. If you already initialized the PostgreSQL volume, keep using its original password unless you intentionally change the database user's password.
-
-2. Start PostgreSQL and wait for `healthy` in `docker compose ps`:
+1. Copy `.env.example` to `.env` and replace the placeholder with a unique local password:
 
    ```cmd
-   docker compose up -d postgres
+   copy .env.example .env
+   ```
+
+   `.env` is ignored by Git. Compose passes this password to PostgreSQL and ContextGuard. If you already initialized the PostgreSQL volume, use its existing password; changing `.env` alone does not change the database user's password.
+
+2. Build and start all three services, then wait until each reports `healthy`:
+
+   ```cmd
+   docker compose up --build -d
    docker compose ps
    ```
 
-3. In a second Command Prompt terminal, start the demo upstream on port `18081`:
+3. In Windows PowerShell, run the verification script. Expect eight `PASS` lines:
+
+   ```powershell
+   .\scripts\verify-gateway.ps1 -GatewayUrl http://127.0.0.1:18080/mcp
+   ```
+
+   If PowerShell blocks scripts, `Set-ExecutionPolicy -Scope Process Bypass` changes the setting only for that PowerShell session. To see startup or error logs, use `docker compose logs contextguard demoupstream postgres`. Stop the demo with `docker compose down`; this keeps the PostgreSQL data volume.
+
+### Run the Java applications locally
+
+If you prefer IntelliJ or Maven, keep PostgreSQL in Compose and run the two applications on your computer. Stop any Compose app containers first with `docker compose stop contextguard demoupstream` so port `18080` is free. This route needs Java 21; the included Maven wrappers do not require a system-wide Maven installation.
+
+1. Start PostgreSQL with `docker compose up -d postgres` and wait for it to be healthy in `docker compose ps`.
+
+2. In a Command Prompt terminal, start the demo upstream:
 
    ```cmd
    cd demoupstream
    mvnw.cmd spring-boot:run -Dspring-boot.run.arguments=--server.port=18081
    ```
 
-   Wait for `Tomcat started on port 18081`. Keep this terminal open.
-
-4. In a third Command Prompt terminal at the repository root, start ContextGuard on port `18080`:
+3. In another Command Prompt terminal at the repository root, start ContextGuard using the same password as the PostgreSQL volume:
 
    ```cmd
    set "SPRING_DATASOURCE_PASSWORD=your-local-database-password"
@@ -190,11 +202,9 @@ These steps use Windows Command Prompt for the applications and Windows PowerShe
    mvnw.cmd spring-boot:run -Dspring-boot.run.arguments=--server.port=18080
    ```
 
-   Wait for `Tomcat started on port 18080`. ContextGuard discovers upstream tools during startup, so start the upstream first. Flyway applies pending migrations as ContextGuard connects to PostgreSQL.
+   Wait for `Tomcat started on port 18080`. ContextGuard discovers upstream tools during startup, so start the upstream first. Flyway applies pending migrations as ContextGuard connects to PostgreSQL. You can then run the same PowerShell verification script shown above.
 
-5. In Windows PowerShell, change to the repository root and run the command in [Demo](#demo). Expect eight `PASS` lines. If script execution is blocked by PowerShell's execution policy, `Set-ExecutionPolicy -Scope Process Bypass` changes the setting only for that PowerShell session.
-
-To use another Streamable HTTP MCP server, set `CONTEXTGUARD_UPSTREAM_URL` to its base URL before starting ContextGuard. The endpoint path defaults to `/mcp` and can be changed with `CONTEXTGUARD_UPSTREAM_ENDPOINT`. Restart ContextGuard when the upstream's tool list changes. The configured upstream must be reachable when ContextGuard starts.
+To use another Streamable HTTP MCP server, set `CONTEXTGUARD_UPSTREAM_URL` to its base URL before starting ContextGuard. For Compose, change the `contextguard` service environment in `compose.yaml`; `localhost` inside that container refers to the container itself. The endpoint path defaults to `/mcp` and can be changed with `CONTEXTGUARD_UPSTREAM_ENDPOINT`. Restart ContextGuard when the upstream's tool list changes. The configured upstream must be reachable when ContextGuard starts.
 
 ## Architecture decisions
 
