@@ -18,7 +18,7 @@ The gateway detects selected sensitive values, applies PostgreSQL-backed rules t
 
 ## Demo
 
-The repository includes a separate MCP server with `echo`, `uppercase`, and a simulated approved `internal_note` tool. The [PowerShell verifier](scripts/verify-gateway.ps1) exercises eight cases; the [Bash verifier](scripts/verify-gateway.sh) checks the three key interview cases on Linux/macOS.
+The repository includes a separate MCP server with `echo`, `uppercase`, and a simulated approved `internal_note` tool. The [PowerShell](scripts/verify-gateway.ps1) and [Bash](scripts/verify-gateway.sh) verifiers both check the same eight gateway behaviors.
 
 Here is the email-redaction scenario. The verification script stands in for an AI app: ContextGuard receives the **tool-call argument**, applies the email rule, and sends only the redacted value to the upstream tool.
 
@@ -93,17 +93,17 @@ One additional example rule overrides `EMAIL` to `ALLOW` for `internal_note` onl
 ## How it works
 
 ```mermaid
-flowchart LR
-    Caller["AI app / MCP client"] -->|"tools/call"| Gateway["ContextGuard MCP gateway"]
-    Gateway --> Detect["Detect sensitive values"]
-    Detect --> Decide["Apply policy"]
-    Rules[(PostgreSQL policy rules)] --> Snapshot["Policy snapshot"]
-    Snapshot --> Decide
-    Decide -->|"BLOCK"| Stop["Audit decision and return error"]
-    Decide -->|"ALLOW or REDACT"| Forward["Audit and forward safe arguments"]
-    Forward --> Upstream["Upstream MCP server"]
-    Upstream -->|"tool result"| Gateway
-    Gateway -->|"tool result"| Caller
+flowchart TD
+    Caller["AI application / MCP client"] -->|"tools/call"| Gateway["ContextGuard gateway<br/>Inspect tool arguments → detect sensitive values → evaluate policy"]
+    Gateway --> Allow["ALLOW<br/>Original arguments"]
+    Gateway --> Redact["REDACT<br/>Sanitized copy"]
+    Gateway --> Block["BLOCK<br/>Do not forward"]
+    Allow --> Audit["Policy decision audited"]
+    Redact --> Audit
+    Block --> Audit
+    Audit -->|"ALLOW or REDACT"| Upstream["Configured upstream MCP server"]
+    Audit -->|"BLOCK"| Error["Return tool error"]
+    Upstream -->|"tool result"| Caller
 ```
 
 ContextGuard is one Spring Boot gateway organized into focused packages for MCP integration, detection, policy evaluation, redaction, and persistence. The demo upstream is a separate application. Spring AI handles the MCP client and server connections; a ContextGuard-owned service controls each `tools/call` before the upstream client can invoke it. Flyway creates the database schema, JPA loads the rules, and the application evaluates calls against an immutable in-memory policy snapshot. An explicit refresh service can replace that snapshot, but there is currently no administration endpoint for it.
@@ -128,7 +128,7 @@ ContextGuard is one Spring Boot gateway organized into focused packages for MCP 
 | Detection and policy decisions | Unit tests cover detectors, tool-specific overrides, precedence, missing rules, and snapshots. |
 | Redaction | Unit tests cover nested arguments, overlapping text ranges, and preservation of original input. |
 | Database wiring | Application tests load seeded rules and verify metadata-only audit persistence. |
-| Real MCP calls | `scripts/verify-gateway.ps1` checks tool discovery, ordinary forwarding, tool-specific email handling, redaction, and blocking; GitHub Actions runs it against both applications. |
+| Real MCP calls | The PowerShell and Bash verifiers both check eight gateway behaviors; GitHub Actions runs both against the gateway and demo upstream. |
 
 With PostgreSQL running and `SPRING_DATASOURCE_PASSWORD` set in the same Command Prompt terminal, run the gateway tests from the repository root:
 
@@ -178,11 +178,11 @@ Run the verification command for your shell:
 ```
 
 ```bash
-# Linux/macOS with bash, curl, and jq: three key checks
+# Linux/macOS with bash, curl, and jq: eight checks
 bash scripts/verify-gateway.sh
 ```
 
-Both verify redaction, a tool-specific exception, and blocking. For logs, use `docker compose logs contextguard demoupstream postgres`. Stop the demo with `docker compose down`; this keeps the PostgreSQL data volume. If PowerShell blocks scripts, `Set-ExecutionPolicy -Scope Process Bypass` changes the setting only for that session.
+Both verify tool discovery, forwarding, redaction, a tool-specific exception, and blocking. For logs, use `docker compose logs contextguard demoupstream postgres`. Stop the demo with `docker compose down`; this keeps the PostgreSQL data volume. If PowerShell blocks scripts, `Set-ExecutionPolicy -Scope Process Bypass` changes the setting only for that session.
 
 ### Run the Java applications locally
 
