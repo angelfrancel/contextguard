@@ -24,7 +24,7 @@ send() {
 }
 
 json_result() {
-  if [[ "$1" == data:* || "$1" == event:* ]]; then
+  if printf '%s\n' "$1" | grep -q '^data:'; then
     printf '%s\n' "$1" | sed -n 's/^data:[[:space:]]*//p' | head -n 1
   else
     printf '%s\n' "$1"
