@@ -93,17 +93,17 @@ One additional example rule overrides `EMAIL` to `ALLOW` for `internal_note` onl
 ## How it works
 
 ```mermaid
-flowchart LR
-    Caller["AI app / MCP client"] -->|"tools/call"| Gateway["ContextGuard MCP gateway"]
-    Gateway --> Detect["Detect sensitive values"]
-    Detect --> Decide["Apply policy"]
-    Rules[(PostgreSQL policy rules)] --> Snapshot["Policy snapshot"]
-    Snapshot --> Decide
-    Decide -->|"BLOCK"| Stop["Audit decision and return error"]
-    Decide -->|"ALLOW or REDACT"| Forward["Audit and forward safe arguments"]
-    Forward --> Upstream["Upstream MCP server"]
-    Upstream -->|"tool result"| Gateway
-    Gateway -->|"tool result"| Caller
+flowchart TD
+    Caller["AI application / MCP client"] -->|"tools/call"| Gateway["ContextGuard gateway<br/>Inspect tool arguments → detect sensitive values → evaluate policy"]
+    Gateway --> Allow["ALLOW<br/>Original arguments"]
+    Gateway --> Redact["REDACT<br/>Sanitized copy"]
+    Gateway --> Block["BLOCK<br/>Do not forward"]
+    Allow --> Audit["Policy decision audited"]
+    Redact --> Audit
+    Block --> Audit
+    Audit -->|"ALLOW or REDACT"| Upstream["Configured upstream MCP server"]
+    Audit -->|"BLOCK"| Error["Return tool error"]
+    Upstream -->|"tool result"| Caller
 ```
 
 ContextGuard is one Spring Boot gateway organized into focused packages for MCP integration, detection, policy evaluation, redaction, and persistence. The demo upstream is a separate application. Spring AI handles the MCP client and server connections; a ContextGuard-owned service controls each `tools/call` before the upstream client can invoke it. Flyway creates the database schema, JPA loads the rules, and the application evaluates calls against an immutable in-memory policy snapshot. An explicit refresh service can replace that snapshot, but there is currently no administration endpoint for it.
